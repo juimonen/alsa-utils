@@ -858,6 +858,97 @@ static int tplg_build_generic_object(struct tplg_pre_processor *tplg_pp, snd_con
 	return ret;
 }
 
+static int tplg_get_sample_size_from_format(const char *format)
+{
+	if (!strcmp(format, "s32le") || !strcmp(format, "s24le") || !strcmp(format, "float"))
+		return 4;
+
+	if (!strcmp(format, "s16le"))
+		return 2;
+
+	return -EINVAL;
+}
+
+static int tplg_update_buffer_auto_attr(struct tplg_pre_processor *tplg_pp,
+					  snd_config_t *buffer_cfg, snd_config_t *parent)
+{
+	snd_config_iterator_t i, next;
+	snd_config_t *n, *pipeline_cfg, *child;
+	const char *id, *format;
+	long periods, channels, sample_size;
+	long sched_period, rate, frames;
+	long buffer_size;
+	int err;
+
+	/* acquire attributes from buffer config */
+	snd_config_for_each(i, next, buffer_cfg) {
+		n = snd_config_iterator_entry(i);
+		if (snd_config_get_id(n, &id) < 0)
+			continue;
+
+		if (!strcmp(id, "periods")) {
+			if (snd_config_get_integer(n, &periods))
+				return -EINVAL;
+		}
+
+		if (!strcmp(id, "channels")) {
+			if (snd_config_get_integer(n, &channels))
+				return -EINVAL;
+		}
+
+		if (!strcmp(id, "format")) {
+			if (snd_config_get_string(n, &format))
+				return -EINVAL;
+		}
+	}
+
+	pipeline_cfg = tplg_object_get_instance_config(tplg_pp, parent);
+
+	/* acquire some other attributes from pipeline config */
+	snd_config_for_each(i, next, pipeline_cfg) {
+		n = snd_config_iterator_entry(i);
+		if (snd_config_get_id(n, &id) < 0)
+				continue;
+
+		if (!strcmp(id, "period")) {
+			if (snd_config_get_integer(n, &sched_period))
+				return -EINVAL;
+		}
+
+		if (!strcmp(id, "rate")) {
+			if (snd_config_get_integer(n, &rate))
+				return -EINVAL;
+		}
+	}
+
+	if (snd_config_get_id(buffer_cfg, &id) < 0)
+		return -EINVAL;
+
+	/* calculate buffer size */
+	sample_size = tplg_get_sample_size_from_format(format);
+	if (sample_size < 0) {
+		SNDERR("Invalid sample size value for %s\n", id);
+		return sample_size;
+	}
+	frames = (rate * sched_period) / 1000000;
+	buffer_size = periods * sample_size * channels * frames;
+
+	/* add size child config to buffer config */
+	err = tplg_config_make_add(&child, "size", SND_CONFIG_TYPE_INTEGER, buffer_cfg);
+	if (err < 0) {
+		SNDERR("Error creating size config for %s\n", id);
+		return -EINVAL;
+	}
+
+	err = snd_config_set_integer(child, buffer_size);
+	if (err < 0) {
+		SNDERR("Error setting size config for %s\n", id);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 const struct config_template_items pcm_caps_config = {
 	.int_config_ids = {"rate_min", "rate_max", "channels_min", "channels_max", "periods_min",
 			   "periods_max", "period_size_min", "period_size_max", "buffer_size_min",
@@ -936,6 +1027,8 @@ const struct build_function_map object_build_map[] = {
 	 &hwcfg_config},
 	{"Base", "fe_dai", "dai", &tplg_build_fe_dai_object, NULL, &fe_dai_config},
 	{"Base", "route", "SectionGraph", &tplg_build_dapm_route_object, NULL, NULL},
+	{"Widget", "buffer", "SectionWidget", &tplg_build_generic_object,
+	 tplg_update_buffer_auto_attr, &widget_config},
 	{"Widget", "", "SectionWidget", &tplg_build_generic_object, NULL, &widget_config},
 	{"Control", "mixer", "SectionControlMixer", &tplg_build_mixer_control, NULL,
 	 &mixer_control_config},
