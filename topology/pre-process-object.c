@@ -1771,6 +1771,11 @@ child:
 	if (ret < 0)
 		SNDERR("error processing child objects in class %s\n", class_id);
 
+	if (!strncmp(id, "DMIC.0", 5) || !strncmp(id, "DMIC.1", 5)) {
+		tplg_pp_debug("Build dmic nhlt blob for %s", id);
+		dmic_build_nhlt();
+	}
+
 	return ret;
 }
 
