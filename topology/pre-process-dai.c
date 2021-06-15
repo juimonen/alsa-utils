@@ -26,6 +26,12 @@
 #include "topology.h"
 #include "pre-processor.h"
 
+int tplg_build_pdm_cfg_object(struct tplg_pre_processor *tplg_pp, snd_config_t *obj_cfg,
+			      snd_config_t *parent)
+{
+	return tplg_build_base_object(tplg_pp, obj_cfg, parent, false);
+}
+
 int tplg_build_hw_cfg_object(struct tplg_pre_processor *tplg_pp,
 			       snd_config_t *obj_cfg, snd_config_t *parent)
 {

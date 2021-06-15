@@ -29,6 +29,7 @@
 #include "gettext.h"
 #include "topology.h"
 #include "pre-processor.h"
+#include "intel/dmic-nhlt.h"
 
 /* Parse VendorToken object, create the "SectionVendorToken" and save it */
 int tplg_build_vendor_token_object(struct tplg_pre_processor *tplg_pp,
@@ -902,22 +903,24 @@ static int tplg_update_buffer_auto_attr(struct tplg_pre_processor *tplg_pp,
 		}
 	}
 
-	pipeline_cfg = tplg_object_get_instance_config(tplg_pp, parent);
+	if (parent) {
+		pipeline_cfg = tplg_object_get_instance_config(tplg_pp, parent);
 
-	/* acquire some other attributes from pipeline config */
-	snd_config_for_each(i, next, pipeline_cfg) {
-		n = snd_config_iterator_entry(i);
-		if (snd_config_get_id(n, &id) < 0)
+		/* acquire some other attributes from pipeline config */
+		snd_config_for_each(i, next, pipeline_cfg) {
+			n = snd_config_iterator_entry(i);
+			if (snd_config_get_id(n, &id) < 0)
 				continue;
 
-		if (!strcmp(id, "period")) {
-			if (snd_config_get_integer(n, &sched_period))
-				return -EINVAL;
-		}
+			if (!strcmp(id, "period")) {
+				if (snd_config_get_integer(n, &sched_period))
+					return -EINVAL;
+			}
 
-		if (!strcmp(id, "rate")) {
-			if (snd_config_get_integer(n, &rate))
-				return -EINVAL;
+			if (!strcmp(id, "rate")) {
+				if (snd_config_get_integer(n, &rate))
+					return -EINVAL;
+			}
 		}
 	}
 
@@ -944,6 +947,191 @@ static int tplg_update_buffer_auto_attr(struct tplg_pre_processor *tplg_pp,
 	if (err < 0) {
 		SNDERR("Error setting size config for %s\n", id);
 		return -EINVAL;
+	}
+
+	return 0;
+}
+
+void print_all_objects(snd_config_t *snd_cfg)
+{
+	snd_config_iterator_t i, next;
+	snd_config_t *n;
+	const char *id;
+	const char *s;
+	snd_config_type_t type = snd_config_get_type(snd_cfg);
+
+	if (type != SND_CONFIG_TYPE_COMPOUND) {
+		return;
+	}
+
+	snd_config_for_each(i, next, snd_cfg) {
+
+		n = snd_config_iterator_entry(i);
+
+		if (snd_config_get_id(n, &id) < 0)
+			continue;
+
+		tplg_pp_debug("Dai auto attr child id: '%s' ...", id);
+
+
+		switch (snd_config_get_type(n)) {
+		case SND_CONFIG_TYPE_INTEGER:
+		{
+			long v;
+			snd_config_get_integer(n, &v);
+			tplg_pp_debug("Dai auto attr value integer: '%ld' ...", v);
+			break;
+		}
+		case SND_CONFIG_TYPE_INTEGER64:
+		{
+			long long v;
+			snd_config_get_integer64(n, &v);
+			tplg_pp_debug("Dai auto attr value integer64: '%lld' ...", v);
+			break;
+		}
+		case SND_CONFIG_TYPE_STRING:
+		{
+			snd_config_get_string(n, &s);
+			tplg_pp_debug("Dai auto attr value string: %s ...", s);
+			break;
+		}
+		default:
+			tplg_pp_debug("Dai auto attr value something else");
+			continue;
+		}
+	}
+}
+
+static int tplg_update_dai_auto_attr(struct tplg_pre_processor *tplg_pp,
+				     snd_config_t *dai_cfg, snd_config_t *parent)
+{
+	snd_config_iterator_t i, next;;
+	snd_config_t *n;
+	const char *id;
+	long int_val = 0;
+
+	tplg_pp_debug("entering dai auto attr id");
+
+	print_all_objects(dai_cfg);
+
+	snd_config_for_each(i, next, dai_cfg) {
+
+		n = snd_config_iterator_entry(i);
+
+		if (snd_config_get_id(n, &id) < 0)
+			continue;
+
+		if (!strcmp(id, "dai_index")) {
+			if (snd_config_get_integer(n, &int_val))
+				return -EINVAL;
+			dmic_set_dai_index(int_val);
+			tplg_pp_debug("ipc found dai_index: '%ld' ...", int_val);
+		}
+
+		if (!strcmp(id, "num_pdm_active")) {
+			if (snd_config_get_integer(n, &int_val))
+				return -EINVAL;
+			dmic_set_num_pdm_active(int_val);
+			tplg_pp_debug("ipc found num_pdm_active: '%ld' ...", int_val);
+		}
+
+		if (!strcmp(id, "fifo_word_length")) {
+			if (snd_config_get_integer(n, &int_val))
+				return -EINVAL;
+			dmic_set_fifo_word_length(int_val);
+			tplg_pp_debug("ipc found fifo_word_length: '%ld' ...", int_val);
+		}
+
+		if (!strcmp(id, "clk_min")) {
+			if (snd_config_get_integer(n, &int_val))
+				return -EINVAL;
+			dmic_set_clk_min(int_val);
+			tplg_pp_debug("ipc found clk_min: '%ld' ...", int_val);
+		}
+
+		if (!strcmp(id, "clk_max")) {
+			if (snd_config_get_integer(n, &int_val))
+				return -EINVAL;
+			dmic_set_clk_max(int_val);
+			tplg_pp_debug("ipc found clk_max: '%ld' ...", int_val);
+		}
+
+		if (!strcmp(id, "duty_min")) {
+			if (snd_config_get_integer(n, &int_val))
+				return -EINVAL;
+			dmic_set_duty_min(int_val);
+			tplg_pp_debug("ipc found duty_min: '%ld' ...", int_val);
+		}
+
+		if (!strcmp(id, "duty_max")) {
+			if (snd_config_get_integer(n, &int_val))
+				return -EINVAL;
+			dmic_set_duty_max(int_val);
+			tplg_pp_debug("ipc found duty_max: '%ld' ...", int_val);
+		}
+
+		if (!strcmp(id, "sample_rate")) {
+			if (snd_config_get_integer(n, &int_val))
+				return -EINVAL;
+			dmic_set_sample_rate(int_val);
+			tplg_pp_debug("ipc found sample_rate: '%ld' ...", int_val);
+		}
+
+		if (!strcmp(id, "unmute_ramp_time_ms")) {
+			if (snd_config_get_integer(n, &int_val))
+				return -EINVAL;
+			dmic_set_unmute_ramp_time_ms(int_val);
+			tplg_pp_debug("ipc found unmute_ramp_time: '%ld' ...", int_val);
+		}
+
+		if (!strcmp(id, "ctrl_id")) {
+			if (snd_config_get_integer(n, &int_val))
+				return -EINVAL;
+			dmic_set_ctrl_id(int_val);
+			tplg_pp_debug("ipc found pdm ctrl id: '%ld' ...", int_val);
+		}
+
+		if (!strcmp(id, "mic_a_enable")) {
+			if (snd_config_get_integer(n, &int_val))
+				return -EINVAL;
+			dmic_set_mic_a_enable(int_val);
+			tplg_pp_debug("ipc found mic_a_enable: '%ld' ...", int_val);
+		}
+
+		if (!strcmp(id, "mic_b_enable")) {
+			if (snd_config_get_integer(n, &int_val))
+				return -EINVAL;
+			dmic_set_mic_b_enable(int_val);
+			tplg_pp_debug("ipc found mic_b_enable: '%ld' ...", int_val);
+		}
+
+		if (!strcmp(id, "polarity_a")) {
+			if (snd_config_get_integer(n, &int_val))
+				return -EINVAL;
+			dmic_set_polarity_a(int_val);
+			tplg_pp_debug("ipc found polarity_a: '%ld' ...", int_val);
+		}
+
+		if (!strcmp(id, "polarity_b")) {
+			if (snd_config_get_integer(n, &int_val))
+				return -EINVAL;
+			dmic_set_polarity_b(int_val);
+			tplg_pp_debug("ipc found polarity_b: '%ld' ...", int_val);
+		}
+
+		if (!strcmp(id, "clk_edge")) {
+			if (snd_config_get_integer(n, &int_val))
+				return -EINVAL;
+			dmic_set_clk_edge(int_val);
+			tplg_pp_debug("ipc found clk_edge: '%ld' ...", int_val);
+		}
+
+		if (!strcmp(id, "skew")) {
+			if (snd_config_get_integer(n, &int_val))
+				return -EINVAL;
+			dmic_set_skew(int_val);
+			tplg_pp_debug("ipc found skew: '%ld' ...", int_val);
+		}
 	}
 
 	return 0;
@@ -1023,7 +1211,9 @@ const struct build_function_map object_build_map[] = {
 	{"Base", "channel", "channel", &tplg_build_channel_object, NULL, &channel_config},
 	{"Base", "VendorToken", "SectionVendorTokens", &tplg_build_vendor_token_object,
 	 NULL, NULL},
-	{"Base", "hw_config", "SectionHWConfig", &tplg_build_hw_cfg_object, NULL,
+	{"Base", "hw_config", "SectionHWConfig", &tplg_build_hw_cfg_object, tplg_update_dai_auto_attr,
+	 &hwcfg_config},
+	{"Base", "pdm_config", "SectionHWConfig", &tplg_build_pdm_cfg_object, tplg_update_dai_auto_attr,
 	 &hwcfg_config},
 	{"Base", "fe_dai", "dai", &tplg_build_fe_dai_object, NULL, &fe_dai_config},
 	{"Base", "route", "SectionGraph", &tplg_build_dapm_route_object, NULL, NULL},
@@ -1034,6 +1224,8 @@ const struct build_function_map object_build_map[] = {
 	 &mixer_control_config},
 	{"Control", "bytes", "SectionControlBytes", &tplg_build_bytes_control, NULL,
 	 &bytes_control_config},
+	{"Dai", "DMIC", "SectionBE", &tplg_build_generic_object, tplg_update_dai_auto_attr,
+	 &be_dai_config},
 	{"Dai", "", "SectionBE", &tplg_build_generic_object, NULL, &be_dai_config},
 	{"PCM", "pcm", "SectionPCM", &tplg_build_generic_object, NULL, &pcm_config},
 	{"PCM", "pcm_caps", "SectionPCMCapabilities", &tplg_build_pcm_caps_object,
@@ -1064,7 +1256,8 @@ static const struct build_function_map *tplg_object_get_map(struct tplg_pre_proc
 			return &object_build_map[i];
 
 		if (!strcmp(class_type, "Dai") &&
-		    !strcmp(object_build_map[i].class_type, "Dai"))
+		    !strcmp(object_build_map[i].class_type, "Dai")  &&
+			!strcmp(object_build_map[i].class_name, ""))
 			return &object_build_map[i];
 
 		/* for other type objects, also match the object class_name */
@@ -1557,7 +1750,7 @@ static int tplg_build_object(struct tplg_pre_processor *tplg_pp, snd_config_t *n
 
 	/* update automatic attribute for current object */
 	auto_attr_updater = map->auto_attr_updater;
-	if(auto_attr_updater && parent) {
+	if(auto_attr_updater) {
 		ret = auto_attr_updater(tplg_pp, obj_local, parent);
 		if (ret < 0) {
 			SNDERR("Failed to update automatic attributes for %s\n", id);
